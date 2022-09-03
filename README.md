@@ -1,26 +1,13 @@
 ---
 title: 'Project: Weightlifting Dataset Prediction'
 author: "Andrew Luyt"
-date: "`r Sys.Date()`"
+date: "2022-09-02"
 output: 
     html_document:
         keep_md: true
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, include=FALSE)
-library(knitr)
-library(kableExtra)
-library(tidyverse)
-library(lubridate)
-library(ModelMetrics) # do before caret so we don't mask e.g. confusionMatrix
-library(caret)
-library(randomForest)
-library(gbm)
-library(glmnet)
-# library(doMC) # parallel backend
-# registerDoMC(4)
-```
+
 
 # Purpose
 
@@ -62,37 +49,21 @@ The original researchers obtained 78.5% overall accuracy on this dataset, with c
 
 # Cleaning and preprocessing
 
-```{r}
-# There are a few ways NAs show up in the data
-df.train <- read_csv("pml-training.csv", na = c("NA", "#DIV/0!", ""))
-df.test <- read_csv("pml-testing.csv", na = c("NA", "#DIV/0!", ""))
-```
+
 
 Using `skimr::skim()` we find that 100 variables have over 97% of their data missing.
 We'll simply remove these variables. *This greatly simplifies the problem of variable selection* as we now only have 59 predictors available.
 
-```{r}
-df.train %>% skimr::skim() %>% 
-    filter(complete_rate < 0.03) %>% 
-    pull(skim_variable) %>% 
-    length()
-```
 
-```{r}
-vars.remove <- df.train %>% 
-    skimr::skim() %>% 
-    filter(complete_rate < 0.03) %>% 
-    pull(skim_variable)
-```
+
+
 
 `user_name`, `new_window` and `classe` need to be converted to factors.  
 `cvtd_timestamp` is the time the user performed the exercise *during the original
 experiment* and will have no bearing on *future* prediction so it will be
 removed.
 
-```{r}
-vars.remove <- c(vars.remove, 'cvtd_timestamp')
-```
+
 
 `raw_timestamp_part_1` is *suspicious.*  In the plot below we can distinguish 
 the blocks of time where each `classe` was performed by each subject. This appears
@@ -104,9 +75,7 @@ example a person in 2022 doing their normal workout in a gym)
 these time patterns may be completely different. 
 We will remove this variable along with `raw_timestamp_part_2`.
 
-```{r include=TRUE}
-df.train %>% ggplot(aes(user_name, raw_timestamp_part_1, col=classe)) + geom_boxplot()
-```
+![](README_files/figure-html/unnamed-chunk-5-1.png)<!-- -->
 
 `num_window` has similar problems. Below, if for example `num_window` is
 about 250, the `classe` will be **B**. This variable seems to be a sequence identifier
@@ -114,45 +83,19 @@ for blocks of information sequentially extracted from the accelerometer data
 stream during feature extraction. There's no reason to suspect this pattern 
 would continue in any future data. This variable will also be removed.
 
-```{r include=TRUE}
-df.train %>% ggplot(aes(num_window, classe, col=classe)) + geom_point()
-```
+![](README_files/figure-html/unnamed-chunk-6-1.png)<!-- -->
 
 
-```{r}
-vars.remove <- c(vars.remove, 'raw_timestamp_part_1', 'raw_timestamp_part_2', 'num_window')
-```
 
-```{r}
 
-clean_df <- function(df) {
-    df <- df %>% 
-        select(!...1) %>%  # row number, useless
-        select(!all_of(vars.remove)) %>% 
-        mutate(user_name = as_factor(user_name),
-               new_window = as_factor(new_window))
-    if ("classe" %in% names(df)) {
-        df <- mutate(df, classe = as_factor(classe))
-    }
-    df
-}
 
-df.train <- clean_df(df.train)
-df.test <- clean_df(df.test)
-```
 
 ## Check variables for normality
 
 Some models, like LDA, assume normal distributions of variables - how good of an assumption would this be?  Using a Shapiro Test, we find that no variable is
 drawn from a normal distribution.
 
-```{r}
-set.seed(1712)
-sample.df <- df.train %>% slice_sample(n = 3000) # shapiro needs < 5000 items
-shapiro.results <- lapply(X = select(sample.df, where(is.numeric)), FUN = shapiro.test)
-shapiro.results <- sapply(shapiro.results, function(i) i$p.value)
-shapiro.results[shapiro.results > 1e-15]; rm(shapiro.results, sample.df)
-```
+
 
 
 ## Check for near-zero-variance predictors
@@ -160,11 +103,7 @@ shapiro.results[shapiro.results > 1e-15]; rm(shapiro.results, sample.df)
 After removing variables full of NAs, `caret::nearZeroVar()` was used. All 
 variables have sufficient variance to be useful, in theory.
 
-```{r}
-df.train %>% select(where(is.numeric)) %>% 
-    nearZeroVar(saveMetrics = T, allowParallel = TRUE) %>% 
-    filter(nzv==TRUE)
-```
+
 
 # Modeling
 
@@ -173,9 +112,7 @@ two ensemble models generally considered to give excellent
 performance on classification problems: boosted trees and random forests.
  
 
-```{r}
-y <- df.train$classe
-```
+
 
 ## Linear Discriminant Model
 
@@ -188,14 +125,10 @@ a .632 bootstrap was 73%.
 N.B. the original researchers obtained results about five percentage points
 higher.
 
-```{r include=TRUE}
-set.seed(1712)
-tc <- trainControl(method = "boot632", number = 10, allowParallel = TRUE)
-fit.lda <- train(classe ~ ., method='lda', data=df.train, trControl=tc)
-preds <- predict(fit.lda)
-round(fit.lda$results[2:3], 3)
-# postResample(preds, y)
-# round(confusionMatrix(preds, y, )$overall, 3)
+
+```
+##   Accuracy Kappa
+## 1    0.733 0.662
 ```
 
 ## Stochastic Gradient Boosting
@@ -204,38 +137,33 @@ We'll use the `gbm` model. A tuning grid is used to estimate
 optimal hyperparameters and generalization error is estimated with a .632 
 bootstrap using `caret`.
 
-```{r include=TRUE, message=FALSE}
-set.seed(1712)
-# parallel processing seems to crash rstudio consistently?
-library(doMC) # parallel backend
-registerDoMC(2)
-f <- "fit.gbm.RDS"
-if (file.exists(f)) {
-    fit.gbm <- readRDS(f)
-} else {
-    tg <- expand.grid(n.trees=c(350, 450),
-                      interaction.depth = 5:6,
-                      shrinkage = c(0.03, 0.1),
-                      n.minobsinnode = 10)
-    tc <- trainControl(method = "boot632", number = 3, allowParallel = TRUE)
-    fit.gbm <- train(classe ~ ., method="gbm", data=df.train, 
-                     trControl=tc, tuneGrid=tg,
-                     verbose=FALSE)
-    saveRDS(object = fit.gbm, file = f)
-}
-colMeans(fit.gbm$resample[, 1:2])
-# preds <- predict(fit.gbm)
-# postResample(preds, y)
+
+```
+##  Accuracy     Kappa 
+## 0.9938963 0.9922686
 ```
 
 These are superb results compared to our baseline. 
 The parameters of the best model found were as follows:
 
-```{r include=TRUE}
-fit.gbm$bestTune %>% as_tibble() %>% 
-    kable() %>% 
-    kable_styling(full_width=FALSE, position="left")
-```
+<table class="table" style="width: auto !important; ">
+ <thead>
+  <tr>
+   <th style="text-align:right;"> n.trees </th>
+   <th style="text-align:right;"> interaction.depth </th>
+   <th style="text-align:right;"> shrinkage </th>
+   <th style="text-align:right;"> n.minobsinnode </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr>
+   <td style="text-align:right;"> 450 </td>
+   <td style="text-align:right;"> 6 </td>
+   <td style="text-align:right;"> 0.1 </td>
+   <td style="text-align:right;"> 10 </td>
+  </tr>
+</tbody>
+</table>
 
 ### Use an explicit train/validate set
 
@@ -245,30 +173,12 @@ Checking our results by using the best model parameters we found, re-training
 on a randomly selected training set and checking accuracy with an independent 
 validation set we obtain these results:
 
-```{r}
-set.seed(1712)
-inVal <- createDataPartition(df.train$classe, p=0.3, list=FALSE)
-validation <- df.train[inVal, ]
-training <- df.train[-inVal, ]
-```
 
-```{r include=TRUE}
-best.params <- fit.gbm$bestTune
-set.seed(1712)
-f <- "fit.gbm.tt.RDS"
-if (file.exists(f)) {
-    fit.gbm.tt <- readRDS(f)
-} else {
-    # Use best parameters and don't create bootstrap estimates.
-    tc <- trainControl(method = "none", allowParallel = TRUE)
-    fit.gbm.tt <- train(classe ~ ., method="gbm", data=training, trControl=tc,
-                        tuneGrid=expand.grid(best.params),
-                        verbose=FALSE)
-    saveRDS(object = fit.gbm.tt, file = f)
-}
-preds <- predict(fit.gbm.tt, validation)
-postResample(preds, validation$classe)
-#confusionMatrix(preds, validation$classe)
+
+
+```
+##  Accuracy     Kappa 
+## 0.9949058 0.9935562
 ```
 
 The test error is very close to the .632 bootstrap estimate.  We can conclude
@@ -276,15 +186,40 @@ that the model is finding a true predictive structure in the data.
 
 Let's also examine the top six most important variables for the boosted model:
 
-```{r include=TRUE}
-gbm.importance <- varImp(fit.gbm.tt$finalModel) %>% 
-    arrange(desc(Overall)) %>% 
-    slice_head(n=6) %>% 
-    mutate(Rank.gbm = rank(max(Overall) - Overall))
-    
-gbm.importance[, "Overall", drop=F] %>% kable() %>% 
-    kable_styling(full_width=FALSE, position="left")
-```
+<table class="table" style="width: auto !important; ">
+ <thead>
+  <tr>
+   <th style="text-align:left;">   </th>
+   <th style="text-align:right;"> Overall </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr>
+   <td style="text-align:left;"> roll_belt </td>
+   <td style="text-align:right;"> 3029.1229 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> yaw_belt </td>
+   <td style="text-align:right;"> 1718.6782 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> pitch_forearm </td>
+   <td style="text-align:right;"> 1623.5248 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> magnet_dumbbell_z </td>
+   <td style="text-align:right;"> 1357.3293 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> magnet_dumbbell_y </td>
+   <td style="text-align:right;"> 1128.9690 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> pitch_belt </td>
+   <td style="text-align:right;"> 997.2662 </td>
+  </tr>
+</tbody>
+</table>
 
 ## Random Forest
 
@@ -292,18 +227,23 @@ The first step is to obtain a good estimate for `mtry`, the number of variables
 to consider at each split of a tree. This is the only tuning parameter we'll consider,
 and we'll use specialized method `randomForest::tuneRF` to get a good estimate.
 
-```{r include=TRUE}
-set.seed(1712)
-f <- "tuned.rf.RDS"
-if (file.exists(f)) {
-    tuned.rf <- readRDS(f)
-} else {
-    tuned.rf <- tuneRF(x=subset(training, select=-classe), y=training$classe,
-                    stepFactor = 1.5, improve=0.001, mtryStart = 7,
-                    ntreeTry = 150, doBest=TRUE)
-    saveRDS(object = tuned.rf, file = f)
-}
-tuned.rf
+
+```
+## 
+## Call:
+##  randomForest(x = x, y = y, mtry = res[which.min(res[, 2]), 1]) 
+##                Type of random forest: classification
+##                      Number of trees: 500
+## No. of variables tried at each split: 10
+## 
+##         OOB estimate of  error rate: 0.57%
+## Confusion matrix:
+##      A    B    C    D    E class.error
+## A 3901    4    0    0    1 0.001280082
+## B   15 2634    8    0    0 0.008656379
+## C    0   10 2380    5    0 0.006263048
+## D    0    0   22 2226    3 0.011106175
+## E    0    0    3    7 2514 0.003961965
 ```
 
 Results suggest the optimal value for `mtry` is around 10. 
@@ -312,23 +252,10 @@ $\sqrt{\text{number of features}} = \sqrt{55} \approx 7$ which is close.
 We'll use 10 in our model. Fitting a model with `mtry=10` on the same training 
 set we used with the boosting method, we get these results:
 
-```{r include=TRUE}
-library(doMC) # parallel backend
-registerDoMC(4)
-set.seed(1712)
-f <- "fit.rf.RDS"
-if (file.exists(f)) {
-    fit.rf <- readRDS(f)
-} else {
-    tc <- trainControl(method = "none", allowParallel = TRUE)
-    tg <- expand.grid(mtry=10)
-    fit.rf <- train(classe ~ ., method="rf", data=training, ntree=500,
-                        trControl=tc, tuneGrid=tg)
-    saveRDS(object = fit.rf, file = f)
-}
-preds <- predict(fit.rf, validation)
-postResample(preds, validation$classe)
-# confusionMatrix(preds, validation$classe)
+
+```
+##  Accuracy     Kappa 
+## 0.9955850 0.9944149
 ```
 
 The random forest obtains 99.6% accuracy on the validation set, compared to
@@ -340,23 +267,57 @@ the top six variables for the random forest are identical to the boosted model,
 suggesting both models are finding similar structures in the data, which
 should increase our confidence in their correctness.
 
-```{r include=TRUE}
-importance(fit.rf$finalModel) %>% as_tibble(rownames = 'variable') %>%
-    arrange(desc(MeanDecreaseGini)) %>% slice_head(n=6) %>% 
-    kable() %>% 
-    kable_styling(full_width=FALSE, position="left")
-# varImpPlot(fit.rf$finalModel)
-```
+<table class="table" style="width: auto !important; ">
+ <thead>
+  <tr>
+   <th style="text-align:left;"> variable </th>
+   <th style="text-align:right;"> MeanDecreaseGini </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr>
+   <td style="text-align:left;"> roll_belt </td>
+   <td style="text-align:right;"> 944.7879 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> yaw_belt </td>
+   <td style="text-align:right;"> 659.9613 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> pitch_forearm </td>
+   <td style="text-align:right;"> 593.0021 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> magnet_dumbbell_z </td>
+   <td style="text-align:right;"> 542.0314 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> pitch_belt </td>
+   <td style="text-align:right;"> 513.0512 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> magnet_dumbbell_y </td>
+   <td style="text-align:right;"> 489.4155 </td>
+  </tr>
+</tbody>
+</table>
 
 # Predictions
 
 A test dataset of 20 observations has been provided. We'll predict using our
 boosted and random forest models and compare them to each other.
 
-```{r echo=TRUE, include=TRUE}
+
+```r
 pred.gbm.tt <- predict(fit.gbm.tt, df.test)
 pred.rf <- predict(fit.rf, df.test)
 table(pred.gbm.tt == pred.rf)
+```
+
+```
+## 
+## TRUE 
+##   20
 ```
 
 Both models predict the same values for the test set.
