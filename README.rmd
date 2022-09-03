@@ -20,10 +20,20 @@ library(glmnet)
 # registerDoMC(4)
 ```
 
-# Notes on dataset
+# Purpose
 
-There are five classes corresponding to correct & incorrect form while doing
-the exercise. This is the `classe` variable.
+To build a machine learning model to distinguish between correct and incorrect 
+exercise form based on readings from accelerometers on the body & dumbbell while 
+performing the exercise.
+
+# The dataset
+
+19623 observations over 160 variables, mostly features created from accelerometer
+data. These data come from a 2013 experiment to see if machine learning algorithms
+could detect if a human was performing weightlifting motions correctly, 
+through readings from an accelerometer device like a FitBit.
+
+The `classe` variable is our target. It holds five classes corresponding to correct & incorrect form while doing the exercise:
 
 * **A**: correct form
 * **B-E**: incorrect form (common mistakes)
@@ -32,18 +42,15 @@ the exercise. This is the `classe` variable.
     * D: lowering the dumbbell only halfway
     * E: throwing the hips to the front
     
-**There are 158 variables available for prediction.**  Variable selection will
-be an important part of this problem. 
-    
-# Intent of dataset
-
-To see if a machine learning model can distinguish between correct and incorrect 
-exercuse form based on readings from accelerometers on the body & dumbbell while performing the exercise.
+Variable selection will be an important part of this problem. 
 
 If the classes could be distinguished automatically and in real-time, one 
 possible application would be a wearable device
 letting off a notification/alarm to tell the user their form is suspect:
 e.g. throwing elbows to the front or thrusting their hips forward. 
+
+These data come from a 2013 experiment, *Qualitative Activity Recognition of Weight Lifting Exercises* by Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H.,
+and was released under a Creative Commons licence.
 
 # Benchmarks
 
@@ -51,9 +58,7 @@ The original researchers obtained 78.5% overall accuracy on this dataset, with c
 
 ![Figure by Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H.](wle_confusion_matrix.png){width=50% height=50%}
 
-
 # Cleaning and preprocessing
-
 
 ```{r}
 # There are a few ways NAs show up in the data
@@ -61,8 +66,8 @@ df.train <- read_csv("pml-training.csv", na = c("NA", "#DIV/0!", ""))
 df.test <- read_csv("pml-testing.csv", na = c("NA", "#DIV/0!", ""))
 ```
 
-There are 159 variables availble. Using `skimr::skim()` we find that 100 them
-have over 97% of their data missing.
+Using `skimr::skim()` we find that 100 variables have over 97% of their data missing.
+We'll simply remove these variables. *This greatly simplifies the problem of variable selection* as we now only have 59 predictors available.
 
 ```{r}
 df.train %>% skimr::skim() %>% 
@@ -71,9 +76,6 @@ df.train %>% skimr::skim() %>%
     length()
 ```
 
-We'll simply remove these variables. *This greatly simplifies the problem of variable selection* as we now only have 59 predictors available. Looking further we find
-a few more problems.
-
 ```{r}
 vars.remove <- df.train %>% 
     skimr::skim() %>% 
@@ -81,23 +83,22 @@ vars.remove <- df.train %>%
     pull(skim_variable)
 ```
 
+`user_name`, `new_window` and `classe` need to be converted to factors.  
 `cvtd_timestamp` is the time the user performed the exercise *during the original
-experiment* and
-will have no bearing on *future* prediction.  `user_name`, `new_window` and 
-`classe` need to be converted to factors.  
+experiment* and will have no bearing on *future* prediction so it will be
+removed.
 
 ```{r}
 vars.remove <- c(vars.remove, 'cvtd_timestamp')
 ```
 
-The variable `raw_timestamp_part_1` is *suspicious.*  In the plot below
-we can distinguish 
-the blocks of time where each `classe` was performed by each user. This appears
+`raw_timestamp_part_1` is *suspicious.*  In the plot below we can distinguish 
+the blocks of time where each `classe` was performed by each subject. This appears
 to be due simply to the way the original experiment was conducted: each subject
-was asked to complete a set of exercises, one after another and these times
-simply reflect that. The issue is that they show a *very strong* predictive 
-pattern in the training data. When an algorithm is applied on *future* data, for
-instance a non-experimental subject doing their normal workout in a gym,
+was asked to perform exercises with a given form one after another, and these times
+simply reflect that sequence. The issue is that they show a *very strong* predictive 
+pattern in the training data. When an algorithm is applied to *future* data (for
+example a person in 2022 doing their normal workout in a gym)
 these time patterns may be completely different. 
 We will remove this variable along with `raw_timestamp_part_2`.
 
@@ -106,10 +107,10 @@ df.train %>% ggplot(aes(user_name, raw_timestamp_part_1, col=classe)) + geom_box
 ```
 
 `num_window` has similar problems. Below, if for example `num_window` is
-about 250, the `classe` will be **B**. This variable seems to be an identifier
+about 250, the `classe` will be **B**. This variable seems to be a sequence identifier
 for blocks of information sequentially extracted from the accelerometer data 
 stream during feature extraction. There's no reason to suspect this pattern 
-would continue in any future data.
+would continue in any future data. This variable will also be removed.
 
 ```{r include=TRUE}
 df.train %>% ggplot(aes(num_window, classe, col=classe)) + geom_point()
@@ -148,7 +149,7 @@ set.seed(1712)
 sample.df <- df.train %>% slice_sample(n = 3000) # shapiro needs < 5000 items
 shapiro.results <- lapply(X = select(sample.df, where(is.numeric)), FUN = shapiro.test)
 shapiro.results <- sapply(shapiro.results, function(i) i$p.value)
-shapiro.results[shapiro.results > 1e-15]; rm(shapiro.results)
+shapiro.results[shapiro.results > 1e-15]; rm(shapiro.results, sample.df)
 ```
 
 
@@ -165,22 +166,24 @@ df.train %>% select(where(is.numeric)) %>%
 
 # Modeling
 
-We'll explore an Linear Discriminant model first as a baseline. We found that
-the variables are not normally distributed, so we can't expect good 
-classification performance.
-
-A .632 bootstrapping estimate is used at first to get an estimate of test
-error while using the dataset efficiently.
+We'll explore an Linear Discriminant model first as a baseline and then
+two ensemble models generally considered to give excellent
+performance on classification problems: boosted trees and random forests.
+ 
 
 ```{r}
 y <- df.train$classe
 ```
 
-
 ## Linear Discriminant Model
 
-`classe` was fit to all variables and the resulting accuracy estimate was 73%.
-We note the original researchers obtained results about five percentage points
+We found that
+the variables are not normally distributed, so we can't expect good 
+classification performance.
+
+`classe` was fit to all variables and the resulting accuracy estimate via
+a .632 bootstrap was 73%.
+N.B. the original researchers obtained results about five percentage points
 higher.
 
 ```{r include=TRUE}
@@ -193,14 +196,11 @@ round(fit.lda$results[2:3], 3)
 # round(confusionMatrix(preds, y, )$overall, 3)
 ```
 
-Next we will try two ensemble models generally considered to give excellent
-performance on many classification problems: boosted trees and random forests.
-
 ## Stochastic Gradient Boosting
 
 We'll use the `gbm` model. A tuning grid is used to estimate
-optimal hyperparameters and error is estimated with a .632 bootstrap
-using `caret`.
+optimal hyperparameters and generalization error is estimated with a .632 
+bootstrap using `caret`.
 
 ```{r include=TRUE, message=FALSE}
 set.seed(1712)
@@ -226,6 +226,7 @@ colMeans(fit.gbm$resample[, 1:2])
 # postResample(preds, y)
 ```
 
+These are superb results compared to our baseline. 
 The parameters of the best model found were as follows:
 
 ```{r include=TRUE}
@@ -239,8 +240,8 @@ fit.gbm$bestTune %>% as_tibble() %>%
 The bootstrap results were suspiciously good and we should suspect overfitting
 even though boosted models overfit slowly.
 Checking our results by using the best model parameters we found, re-training
-on a training set and checking accuracy with an independent validation set we
-again obtain these results:
+on a randomly selected training set and checking accuracy with an independent 
+validation set we obtain these results:
 
 ```{r}
 set.seed(1712)
@@ -268,8 +269,8 @@ postResample(preds, validation$classe)
 #confusionMatrix(preds, validation$classe)
 ```
 
-The results seem to be real, and the test error is very close to the .632
-bootstrap estimate.
+The test error is very close to the .632 bootstrap estimate.  We can conclude
+that the model is finding a true predictive structure in the data.
 
 Let's also examine the top six most important variables for the boosted model:
 
@@ -286,9 +287,8 @@ gbm.importance[, "Overall", drop=F] %>% kable() %>%
 ## Random Forest
 
 The first step is to obtain a good estimate for `mtry`, the number of variables
-to consider at each split of a tree. This is the only tuning parameter available,
-and the `randomForest` package has a specialized method for getting a good
-estimate, `tuneRF`, so we'll use that.  
+to consider at each split of a tree. This is the only tuning parameter we'll consider,
+and we'll use specialized method `randomForest::tuneRF` to get a good estimate.
 
 ```{r include=TRUE}
 set.seed(1712)
@@ -334,8 +334,9 @@ The random forest obtains 99.6% accuracy on the validation set, compared to
 predictive ability, though the random forest was much faster to train.
 
 Using the generic `importance` function to list variable importance,
-the top six variables are identical to the boosted model, suggesting both models 
-are finding similar structures in the data.
+the top six variables for the random forest are identical to the boosted model,
+suggesting both models are finding similar structures in the data, which
+should increase our confidence in their correctness.
 
 ```{r include=TRUE}
 importance(fit.rf$finalModel) %>% as_tibble(rownames = 'variable') %>%
@@ -358,11 +359,20 @@ table(pred.gbm.tt == pred.rf)
 
 Both models predict the same values for the test set.
 
+# Conclusions
+
+After reducing the number of variables from 160 to 54, we were able to build
+a random forest model with predictive accuracy of 99.6%, and a boosted tree
+model with accuracy of 99.5%, both estimates coming from an independent
+test set.
+
 # References
 
 Original Dataset:
 
 Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013. 
+
+Obtained from [https://web.archive.org/web/20150207080848/http://groupware.les.inf.puc-rio.br/har](https://web.archive.org/web/20150207080848/http://groupware.les.inf.puc-rio.br/har)
 
 
 
