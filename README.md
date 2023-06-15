@@ -15,6 +15,15 @@ To build a machine learning model to distinguish between correct and incorrect
 exercise form based on readings from accelerometers on the body & dumbbell while 
 performing the exercise.
 
+# Summary of Results
+
+Using linear discriminant analysis (LDA) we created a model with predictive accuracy
+of 73%. This did not match the original researchers' benchmark of 78.5%.
+
+Finding that the data were not well-suited to the assumptions of LDA we were 
+able to build a random forest model with predictive **accuracy of 99.6%**, and a 
+boosted tree model with **accuracy of 99.5%**
+
 # The dataset
 
 19623 observations over 160 variables, mostly features created from accelerometer

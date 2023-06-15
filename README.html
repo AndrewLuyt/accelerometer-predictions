@@ -601,6 +601,14 @@ Prediction</h1>
 incorrect exercise form based on readings from accelerometers on the
 body &amp; dumbbell while performing the exercise.</p>
 </div>
+<div id="summary-of-results" class="section level1">
+<h1>Summary of Results</h1>
+<p>Using linear discriminant analysis (LDA) we created a model with predictive accuracy
+of 73%. This did not match the original researchers' benchmark of 78.5%.</p>
+<p>Finding that the data were not well-suited to the assumptions of LDA we were
+able to build a random forest model with predictive <strong>accuracy of 99.6%</strong>, and a
+boosted tree model with <strong>accuracy of 99.5%</strong></p>
+</div>
 <div id="the-dataset" class="section level1">
 <h1>The dataset</h1>
 <p>19623 observations over 160 variables, mostly features created from
@@ -706,7 +714,7 @@ researchers obtained results about five percentage points higher.</p>
 <p>We’ll use the <code>gbm</code> model. A tuning grid is used to
 estimate optimal hyperparameters and generalization error is estimated
 with a .632 bootstrap using <code>caret</code>.</p>
-<pre><code>##  Accuracy     Kappa 
+<pre><code>##  Accuracy     Kappa
 ## 0.9938963 0.9922686</code></pre>
 <p>These are superb results compared to our baseline. The parameters of
 the best model found were as follows:</p>
@@ -751,7 +759,7 @@ overfitting even though boosted models overfit slowly. Checking our
 results by using the best model parameters we found, re-training on a
 randomly selected training set and checking accuracy with an independent
 validation set we obtain these results:</p>
-<pre><code>##  Accuracy     Kappa 
+<pre><code>##  Accuracy     Kappa
 ## 0.9949058 0.9935562</code></pre>
 <p>The test error is very close to the .632 bootstrap estimate. We can
 conclude that the model is finding a true predictive structure in the
@@ -827,13 +835,13 @@ pitch_belt
 the number of variables to consider at each split of a tree. This is the
 only tuning parameter we’ll consider, and we’ll use specialized method
 <code>randomForest::tuneRF</code> to get a good estimate.</p>
-<pre><code>## 
+<pre><code>##
 ## Call:
-##  randomForest(x = x, y = y, mtry = res[which.min(res[, 2]), 1]) 
+##  randomForest(x = x, y = y, mtry = res[which.min(res[, 2]), 1])
 ##                Type of random forest: classification
 ##                      Number of trees: 500
 ## No. of variables tried at each split: 10
-## 
+##
 ##         OOB estimate of  error rate: 0.57%
 ## Confusion matrix:
 ##      A    B    C    D    E class.error
@@ -847,7 +855,7 @@ Literature suggests a value for <code>mtry</code> around <span class="math inlin
 \approx 7\)</span> which is close. We’ll use 10 in our model. Fitting a
 model with <code>mtry=10</code> on the same training set we used with
 the boosting method, we get these results:</p>
-<pre><code>##  Accuracy     Kappa 
+<pre><code>##  Accuracy     Kappa
 ## 0.9955850 0.9944149</code></pre>
 <p>The random forest obtains 99.6% accuracy on the validation set,
 compared to 99.5% for the boosted model. The models are nearly
@@ -930,8 +938,8 @@ other.</p>
 <pre class="r"><code>pred.gbm.tt &lt;- predict(fit.gbm.tt, df.test)
 pred.rf &lt;- predict(fit.rf, df.test)
 table(pred.gbm.tt == pred.rf)</code></pre>
-<pre><code>## 
-## TRUE 
+<pre><code>##
+## TRUE
 ##   20</code></pre>
 <p>Both models predict the same values for the test set.</p>
 </div>
