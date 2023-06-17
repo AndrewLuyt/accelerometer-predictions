@@ -1,7 +1,7 @@
 ---
 title: 'Project: Weightlifting Dataset Prediction'
 author: "Andrew Luyt"
-date: "2022-09-02"
+date: "2023-06-17"
 output: 
     html_document:
         keep_md: true
@@ -9,27 +9,37 @@ output:
 
 
 
+![AI-generated image of a woman exercising with a smart device](ai_exercise.png)
+
 # Purpose
 
-To build a machine learning model to distinguish between correct and incorrect 
-exercise form based on readings from accelerometers on the body & dumbbell while 
-performing the exercise.
+To build a machine learning model that can accurately detect if a human is
+performing an exercise using the incorrect form.
+The model will only use measurements from 
+accelerometers on the body & dumbbell while performing dumbbell bicep curls.
+
+The model should be able to **detect and distinguish** between mistakes such as 
+incorrect elbow position or only partially lifting the dumbbell.
+
+The model should be, at least theoretically, implementable on a wearable device
+such as a smart watch or FitBit.
+
+This project aims to improve upon the results of a 2013 experiment yielding
+a model with 78.5% accuracy.
 
 # Summary of Results
 
 Using linear discriminant analysis (LDA) we created a model with predictive accuracy
 of 73%. This did not match the original researchers' benchmark of 78.5%.
 
-Finding that the data were not well-suited to the assumptions of LDA we were 
-able to build a random forest model with predictive **accuracy of 99.6%**, and a 
-boosted tree model with **accuracy of 99.5%**
+Finding that the data were not well-suited to the assumptions of LDA **we were 
+able to build a random forest model with predictive accuracy of 99.6%, and a 
+boosted tree model with an accuracy of 99.5%.**
 
 # The dataset
 
-19623 observations over 160 variables, mostly features created from accelerometer
-data. These data come from a 2013 experiment to see if machine learning algorithms
-could detect if a human was performing weightlifting motions correctly, 
-through readings from an accelerometer device like a FitBit.
+19623 observations over 160 variables, mostly features extracted from
+accelerometer data streams. 
 
 The `classe` variable is our target. It holds five classes corresponding to correct & incorrect form while doing the exercise:
 
@@ -48,7 +58,7 @@ letting off a notification/alarm to tell the user their form is suspect:
 e.g. throwing elbows to the front or thrusting their hips forward. 
 
 These data come from a 2013 experiment, *Qualitative Activity Recognition of Weight Lifting Exercises* by Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H.,
-and was released under a Creative Commons licence.
+and was released under a Creative Commons licence. [See References for URLs]
 
 # Benchmarks
 
@@ -149,10 +159,11 @@ bootstrap using `caret`.
 
 ```
 ##  Accuracy     Kappa 
-## 0.9938963 0.9922686
+## 0.9938498 0.9922100
 ```
 
-These are superb results compared to our baseline. 
+These are superb results compared to our baseline, perhaps too good. We'll
+investigate the possibility of overfitting in the next section.
 The parameters of the best model found were as follows:
 
 <table class="table" style="width: auto !important; ">
@@ -187,7 +198,7 @@ validation set we obtain these results:
 
 ```
 ##  Accuracy     Kappa 
-## 0.9949058 0.9935562
+## 0.9954152 0.9942008
 ```
 
 The test error is very close to the .632 bootstrap estimate.  We can conclude
@@ -205,27 +216,27 @@ Let's also examine the top six most important variables for the boosted model:
 <tbody>
   <tr>
    <td style="text-align:left;"> roll_belt </td>
-   <td style="text-align:right;"> 3029.1229 </td>
+   <td style="text-align:right;"> 3029.9119 </td>
   </tr>
   <tr>
    <td style="text-align:left;"> yaw_belt </td>
-   <td style="text-align:right;"> 1718.6782 </td>
+   <td style="text-align:right;"> 1729.6019 </td>
   </tr>
   <tr>
    <td style="text-align:left;"> pitch_forearm </td>
-   <td style="text-align:right;"> 1623.5248 </td>
+   <td style="text-align:right;"> 1624.3076 </td>
   </tr>
   <tr>
    <td style="text-align:left;"> magnet_dumbbell_z </td>
-   <td style="text-align:right;"> 1357.3293 </td>
+   <td style="text-align:right;"> 1355.1941 </td>
   </tr>
   <tr>
    <td style="text-align:left;"> magnet_dumbbell_y </td>
-   <td style="text-align:right;"> 1128.9690 </td>
+   <td style="text-align:right;"> 1132.4021 </td>
   </tr>
   <tr>
    <td style="text-align:left;"> pitch_belt </td>
-   <td style="text-align:right;"> 997.2662 </td>
+   <td style="text-align:right;"> 988.0864 </td>
   </tr>
 </tbody>
 </table>
@@ -342,7 +353,7 @@ test set.
 
 Original Dataset:
 
-Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013. 
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, [H. Qualitative Activity Recognition of Weight Lifting Exercises.](https://www.researchgate.net/publication/266653495_Qualitative_activity_recognition_of_weight_lifting_exercises) Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013. 
 
 Obtained from [https://web.archive.org/web/20150207080848/http://groupware.les.inf.puc-rio.br/har](https://web.archive.org/web/20150207080848/http://groupware.les.inf.puc-rio.br/har)
 
