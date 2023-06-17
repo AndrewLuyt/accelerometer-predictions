@@ -1,5 +1,5 @@
 ---
-title: 'Project: Weightlifting Dataset Prediction'
+title: 'Project: Automated Exercise Assistant'
 author: "Andrew Luyt"
 date: "`r Sys.Date()`"
 output: 
@@ -31,14 +31,19 @@ performing an exercise using the incorrect form.
 The model will only use measurements from 
 accelerometers on the body & dumbbell while performing dumbbell bicep curls.
 
-The model should be able to **detect and distinguish** between mistakes such as 
-incorrect elbow position or only partially lifting the dumbbell.
-
-The model should be, at least theoretically, implementable on a wearable device
-such as a smart watch or FitBit.
-
 This project aims to improve upon the results of a 2013 experiment yielding
 a model with 78.5% accuracy.
+
+The model should be able to **detect and distinguish between** mistakes such as 
+incorrect elbow position or only partially lifting the dumbbell. It should
+also be, at least theoretically, implementable on a wearable device
+such as a smart watch or FitBit.
+
+If a person's errors in exercise form
+could be detected automatically and in real-time, one 
+possible application would be a wearable device
+sending an audio notification to tell the user their form is suspect:
+e.g. throwing elbows to the front or thrusting their hips forward. 
 
 # Summary of Results
 
@@ -51,7 +56,7 @@ boosted tree model with an accuracy of 99.5%.**
 
 # The dataset
 
-19623 observations over 160 variables, mostly features extracted from
+19623 observations over 160 variables, mostly numeric features extracted from
 accelerometer data streams. 
 
 The `classe` variable is our target. It holds five classes corresponding to correct & incorrect form while doing the exercise:
@@ -64,11 +69,6 @@ The `classe` variable is our target. It holds five classes corresponding to corr
     * E: throwing the hips to the front
     
 Variable selection will be an important part of this problem. 
-
-If the classes could be distinguished automatically and in real-time, one 
-possible application would be a wearable device
-letting off a notification/alarm to tell the user their form is suspect:
-e.g. throwing elbows to the front or thrusting their hips forward. 
 
 These data come from a 2013 experiment, *Qualitative Activity Recognition of Weight Lifting Exercises* by Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H.,
 and was released under a Creative Commons licence. [See References for URLs]
@@ -88,7 +88,7 @@ df.test <- read_csv("pml-testing.csv", na = c("NA", "#DIV/0!", ""))
 ```
 
 Using `skimr::skim()` we find that 100 variables have over 97% of their data missing.
-We'll simply remove these variables. *This greatly simplifies the problem of variable selection* as we now only have 59 predictors available.
+We'll simply remove these variables. This greatly simplifies the problem of variable selection as we now only have 59 predictors available.
 
 ```{r}
 df.train %>% skimr::skim() %>% 
@@ -117,10 +117,9 @@ vars.remove <- c(vars.remove, 'cvtd_timestamp')
 the blocks of time where each `classe` was performed by each subject. This appears
 to be due simply to the way the original experiment was conducted: each subject
 was asked to perform exercises with a given form one after another, and these times
-simply reflect that sequence. The issue is that they show a *very strong* predictive 
-pattern in the training data. When an algorithm is applied to *future* data (for
-example a person in 2022 doing their normal workout in a gym)
-these time patterns may be completely different. 
+simply reflect that sequence.  When an algorithm is applied to *future* data (for
+example a person doing their workout tomorrow)
+these time patterns will be completely different, rendering this feature useless. 
 We will remove this variable along with `raw_timestamp_part_2`.
 
 ```{r include=TRUE}
@@ -162,8 +161,9 @@ df.test <- clean_df(df.test)
 
 ## Check variables for normality
 
-Some models, like LDA, assume normal distributions of variables - how good of an assumption would this be?  Using a Shapiro Test, we find that no variable is
-drawn from a normal distribution.
+Some models, like LDA, assume normal distributions of variables - how good of 
+an assumption would this be?  Using a Shapiro Test, we find that no variable is
+drawn from a normal distribution. 
 
 ```{r}
 set.seed(1712)
@@ -187,7 +187,7 @@ df.train %>% select(where(is.numeric)) %>%
 
 # Modeling
 
-We'll explore an Linear Discriminant model first as a baseline and then
+We'll explore a Linear Discriminant model first as a baseline and then
 two ensemble models generally considered to give excellent
 performance on classification problems: boosted trees and random forests.
  
@@ -198,14 +198,13 @@ y <- df.train$classe
 
 ## Linear Discriminant Model
 
-We found that
+Earlier we found that
 the variables are not normally distributed, so we can't expect good 
-classification performance.
+classification performance from LDA.
 
 `classe` was fit to all variables and the resulting accuracy estimate via
-a .632 bootstrap was 73%.
-N.B. the original researchers obtained results about five percentage points
-higher.
+a .632 bootstrap was 73%.  The original researchers obtained results about 
+five percentage points higher.
 
 ```{r include=TRUE}
 set.seed(1712)
@@ -219,7 +218,10 @@ round(fit.lda$results[2:3], 3)
 
 ## Stochastic Gradient Boosting
 
-We'll use the `gbm` model. A tuning grid is used to estimate
+Tree-based ensembles are traditionally strong performers on classification tasks.
+Our first ensemble will use gradient boosting via the `gbm` model.
+
+A tuning grid is used to estimate
 optimal hyperparameters and generalization error is estimated with a .632 
 bootstrap using `caret`.
 
