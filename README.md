@@ -1,4 +1,4 @@
-Project: Automated Exercise Assistant
+Automated Exercise Assistant
 ================
 Andrew Luyt
 2023-06-17

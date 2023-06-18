@@ -1,5 +1,5 @@
 ---
-title: 'Project: Automated Exercise Assistant'
+title: 'Automated Exercise Assistant'
 author: "Andrew Luyt"
 date: "`r Sys.Date()`"
 always_allow_html: yes
