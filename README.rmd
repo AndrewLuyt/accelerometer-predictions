@@ -47,12 +47,11 @@ e.g. throwing elbows to the front or thrusting their hips forward.
 
 # Summary of Results
 
-Using linear discriminant analysis (LDA) we created a model with predictive accuracy
-of 73%. This did not match the original researchers' benchmark of 78.5%.
+Using linear discriminant analysis (LDA) we created a baseline model with predictive accuracy
+of 70%. This did not match the original researchers' benchmark of 78.5%.
 
 Finding that the data were not well-suited to the assumptions of LDA **we were 
-able to build a random forest model with predictive accuracy of 99.6%, and a 
-boosted tree model with an accuracy of 99.5%.**
+able to build random forest and boosted models with predictive accuracy of 99.3%.**
 
 # The dataset
 
@@ -104,10 +103,11 @@ vars.remove <- df.train %>%
     pull(skim_variable)
 ```
 
-`user_name`, `new_window` and `classe` need to be converted to factors.  
+`classe` needs to be converted to factors.  
 `cvtd_timestamp` is the time the user performed the exercise *during the original
 experiment* and will have no bearing on *future* prediction so it will be
-removed.
+removed. `user_name` will be removed as well as we can't expect it to be
+available in the future.
 
 ```{r}
 vars.remove <- c(vars.remove, 'cvtd_timestamp')
@@ -120,7 +120,8 @@ was asked to perform exercises with a given form one after another, and these ti
 simply reflect that sequence.  When an algorithm is applied to *future* data (for
 example a person doing their workout tomorrow)
 these time patterns will be completely different, rendering this feature useless. 
-We will remove this variable along with `raw_timestamp_part_2`.
+We will remove this variable along with `raw_timestamp_part_2`, 
+and `new_window` for similar reasons.
 
 ```{r include=TRUE}
 df.train %>% ggplot(aes(user_name, raw_timestamp_part_1, col=classe)) + geom_boxplot()
@@ -138,7 +139,8 @@ df.train %>% ggplot(aes(num_window, classe, col=classe)) + geom_point()
 
 
 ```{r}
-vars.remove <- c(vars.remove, 'raw_timestamp_part_1', 'raw_timestamp_part_2', 'num_window')
+vars.remove <- c(vars.remove, 'raw_timestamp_part_1', 'raw_timestamp_part_2', 'num_window',
+                 'user_name', 'new_window')
 ```
 
 ```{r}
@@ -146,9 +148,7 @@ vars.remove <- c(vars.remove, 'raw_timestamp_part_1', 'raw_timestamp_part_2', 'n
 clean_df <- function(df) {
     df <- df %>% 
         select(!...1) %>%  # row number, useless
-        select(!all_of(vars.remove)) %>% 
-        mutate(user_name = as_factor(user_name),
-               new_window = as_factor(new_window))
+        select(!all_of(vars.remove))
     if ("classe" %in% names(df)) {
         df <- mutate(df, classe = as_factor(classe))
     }
@@ -203,8 +203,8 @@ the variables are not normally distributed, so we can't expect good
 classification performance from LDA.
 
 `classe` was fit to all variables and the resulting accuracy estimate via
-a .632 bootstrap was 73%.  The original researchers obtained results about 
-five percentage points higher.
+a .632 bootstrap was 70%.  The original researchers obtained 78.5% using
+a different model, so we will have to improve on this.
 
 ```{r include=TRUE}
 set.seed(1712)
@@ -227,9 +227,8 @@ bootstrap using `caret`.
 
 ```{r include=TRUE, message=FALSE}
 set.seed(1712)
-# parallel processing seems to crash rstudio consistently?
-library(doMC) # parallel backend
-registerDoMC(4)
+# registerDoMC(4)  # reduce cores if crashing. gbm can use a lot of memory.
+
 f <- "fit.gbm.RDS"
 if (file.exists(f)) {
     fit.gbm <- readRDS(f)
@@ -245,8 +244,6 @@ if (file.exists(f)) {
     saveRDS(object = fit.gbm, file = f)
 }
 colMeans(fit.gbm$resample[, 1:2])
-# preds <- predict(fit.gbm)
-# postResample(preds, y)
 ```
 
 These are superb results compared to our baseline, perhaps too good. We'll
@@ -268,7 +265,7 @@ on a randomly selected training set and checking accuracy with an independent
 validation set we obtain these results:
 
 ```{r}
-set.seed(1712)
+set.seed(42) # make sure to use a different seed
 inVal <- createDataPartition(df.train$classe, p=0.3, list=FALSE)
 validation <- df.train[inVal, ]
 training <- df.train[-inVal, ]
@@ -276,7 +273,7 @@ training <- df.train[-inVal, ]
 
 ```{r include=TRUE}
 best.params <- fit.gbm$bestTune
-set.seed(1712)
+set.seed(42)
 f <- "fit.gbm.tt.RDS"
 if (file.exists(f)) {
     fit.gbm.tt <- readRDS(f)
@@ -290,10 +287,18 @@ if (file.exists(f)) {
 }
 preds <- predict(fit.gbm.tt, validation)
 postResample(preds, validation$classe)
-#confusionMatrix(preds, validation$classe)
 ```
 
-The test error is very close to the .632 bootstrap estimate.  We can conclude
+```{r include=TRUE}
+confusionMatrix(preds, validation$classe)$byClass |> 
+    as_tibble(rownames="Prediction") |> 
+    select(1,2,3,balanced.accuracy=12) |> 
+    kable() |> 
+    kable_styling(full_width=FALSE, position="left")
+```
+
+
+The test performance, 99.27%, is very close to the .632 bootstrap estimate.  We can conclude
 that the model is finding a true predictive structure in the data.
 
 Let's also examine the top six most important variables for the boosted model:
@@ -353,14 +358,23 @@ postResample(preds, validation$classe)
 # confusionMatrix(preds, validation$classe)
 ```
 
-The random forest obtains 99.6% accuracy on the validation set, compared to
-99.5% for the boosted model. The models are nearly equivalent in their
+```{r include=TRUE}
+confusionMatrix(preds, validation$classe)$byClass |> 
+    as_tibble(rownames="Prediction") |> 
+    select(1,2,3,balanced.accuracy=12) |> 
+    kable() |> 
+    kable_styling(full_width=FALSE, position="left")
+```
+
+The random forest obtains 99.3% accuracy on the validation set, compared to
+99.26% for the boosted model. Their class-specific sensitivity, specificity,
+etc are also near-equal. The models are essentially equivalent in their
 predictive ability, though the random forest was much faster to train.
 
 Using the generic `importance` function to list variable importance,
-the top six variables for the random forest are identical to the boosted model,
+the top six variables for the random forest are the same  the boosted model,
 suggesting both models are finding similar structures in the data, which
-should increase our confidence in their correctness.
+increases our confidence in their correctness.
 
 ```{r include=TRUE}
 importance(fit.rf$finalModel) %>% as_tibble(rownames = 'variable') %>%
@@ -385,10 +399,18 @@ Both models predict the same values for the test set.
 
 # Conclusions
 
-After reducing the number of variables from 160 to 54, we were able to build
-a random forest model with predictive accuracy of 99.6%, and a boosted tree
-model with accuracy of 99.5%, both estimates coming from an independent
-test set.
+After reducing the number of variables from 160 to 52, we were able to build
+both random forest and boosted models with an accuracy of 99.3%, equivalent
+to be one false detection in 143 repetitions of a bicep curl. It
+seems likely that a combination of smart devices and machine learning are
+genuinely able to detect correct vs incorrect exercise form. 
+
+To create a real-world product there would be much more work to do, starting with
+creating a much larger dataset including all the other types of exercise the smart device
+would support - this dataset only contains observations of one exercise.
+Other complications such as expert consultation with exercise physiologists
+and liability issues would have to be taken into account, so this is where
+I will end this project.
 
 # References
 
@@ -397,16 +419,6 @@ Original Dataset:
 Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, [H. Qualitative Activity Recognition of Weight Lifting Exercises.](https://www.researchgate.net/publication/266653495_Qualitative_activity_recognition_of_weight_lifting_exercises) Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013. 
 
 Obtained from [https://web.archive.org/web/20150207080848/http://groupware.les.inf.puc-rio.br/har](https://web.archive.org/web/20150207080848/http://groupware.les.inf.puc-rio.br/har)
-
-
-
-
-
-
-
-
-
-
 
 
 

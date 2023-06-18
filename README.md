@@ -1,7 +1,7 @@
 Automated Exercise Assistant
 ================
 Andrew Luyt
-2023-06-17
+2023-06-18
 
 <figure>
 <img src="ai_exercise.png"
@@ -32,13 +32,13 @@ e.g. throwing elbows to the front or thrusting their hips forward.
 
 # Summary of Results
 
-Using linear discriminant analysis (LDA) we created a model with
-predictive accuracy of 73%. This did not match the original researchers’
-benchmark of 78.5%.
+Using linear discriminant analysis (LDA) we created a baseline model
+with predictive accuracy of 70%. This did not match the original
+researchers’ benchmark of 78.5%.
 
 Finding that the data were not well-suited to the assumptions of LDA
-**we were able to build a random forest model with predictive accuracy
-of 99.6%, and a boosted tree model with an accuracy of 99.5%.**
+**we were able to build random forest and boosted models with predictive
+accuracy of 99.3%.**
 
 # The dataset
 
@@ -81,11 +81,11 @@ data missing. We’ll simply remove these variables. This greatly
 simplifies the problem of variable selection as we now only have 59
 predictors available.
 
-`user_name`, `new_window` and `classe` need to be converted to
-factors.  
+`classe` needs to be converted to factors.  
 `cvtd_timestamp` is the time the user performed the exercise *during the
 original experiment* and will have no bearing on *future* prediction so
-it will be removed.
+it will be removed. `user_name` will be removed as well as we can’t
+expect it to be available in the future.
 
 `raw_timestamp_part_1` is *suspicious.* In the plot below we can
 distinguish the blocks of time where each `classe` was performed by each
@@ -95,7 +95,8 @@ with a given form one after another, and these times simply reflect that
 sequence. When an algorithm is applied to *future* data (for example a
 person doing their workout tomorrow) these time patterns will be
 completely different, rendering this feature useless. We will remove
-this variable along with `raw_timestamp_part_2`.
+this variable along with `raw_timestamp_part_2`, and `new_window` for
+similar reasons.
 
 ![](README_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
 
@@ -131,11 +132,11 @@ Earlier we found that the variables are not normally distributed, so we
 can’t expect good classification performance from LDA.
 
 `classe` was fit to all variables and the resulting accuracy estimate
-via a .632 bootstrap was 73%. The original researchers obtained results
-about five percentage points higher.
+via a .632 bootstrap was 70%. The original researchers obtained 78.5%
+using a different model, so we will have to improve on this.
 
     ##   Accuracy Kappa
-    ## 1    0.733 0.662
+    ## 1    0.703 0.624
 
 ## Stochastic Gradient Boosting
 
@@ -147,7 +148,7 @@ A tuning grid is used to estimate optimal hyperparameters and
 generalization error is estimated with a .632 bootstrap using `caret`.
 
     ##  Accuracy     Kappa 
-    ## 0.9938498 0.9922100
+    ## 0.9938957 0.9922679
 
 These are superb results compared to our baseline, perhaps too good.
 We’ll investigate the possibility of overfitting in the next section.
@@ -197,11 +198,102 @@ randomly selected training set and checking accuracy with an independent
 validation set we obtain these results:
 
     ##  Accuracy     Kappa 
-    ## 0.9954152 0.9942008
+    ## 0.9926983 0.9907628
 
-The test error is very close to the .632 bootstrap estimate. We can
-conclude that the model is finding a true predictive structure in the
-data.
+<table class="table" style="width: auto !important; ">
+<thead>
+<tr>
+<th style="text-align:left;">
+Prediction
+</th>
+<th style="text-align:right;">
+Sensitivity
+</th>
+<th style="text-align:right;">
+Specificity
+</th>
+<th style="text-align:right;">
+balanced.accuracy
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+Class: A
+</td>
+<td style="text-align:right;">
+0.9982079
+</td>
+<td style="text-align:right;">
+0.9966785
+</td>
+<td style="text-align:right;">
+0.9974432
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Class: B
+</td>
+<td style="text-align:right;">
+0.9842105
+</td>
+<td style="text-align:right;">
+0.9985260
+</td>
+<td style="text-align:right;">
+0.9913683
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Class: C
+</td>
+<td style="text-align:right;">
+0.9941577
+</td>
+<td style="text-align:right;">
+0.9969148
+</td>
+<td style="text-align:right;">
+0.9955363
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Class: D
+</td>
+<td style="text-align:right;">
+0.9906736
+</td>
+<td style="text-align:right;">
+0.9987815
+</td>
+<td style="text-align:right;">
+0.9947275
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Class: E
+</td>
+<td style="text-align:right;">
+0.9935365
+</td>
+<td style="text-align:right;">
+0.9997919
+</td>
+<td style="text-align:right;">
+0.9966642
+</td>
+</tr>
+</tbody>
+</table>
+
+The test performance, 99.27%, is very close to the .632 bootstrap
+estimate. We can conclude that the model is finding a true predictive
+structure in the data.
 
 Let’s also examine the top six most important variables for the boosted
 model:
@@ -222,15 +314,7 @@ Overall
 roll_belt
 </td>
 <td style="text-align:right;">
-3029.9119
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-yaw_belt
-</td>
-<td style="text-align:right;">
-1729.6019
+3117.3068
 </td>
 </tr>
 <tr>
@@ -238,7 +322,15 @@ yaw_belt
 pitch_forearm
 </td>
 <td style="text-align:right;">
-1624.3076
+1727.4100
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+yaw_belt
+</td>
+<td style="text-align:right;">
+1680.7166
 </td>
 </tr>
 <tr>
@@ -246,7 +338,7 @@ pitch_forearm
 magnet_dumbbell_z
 </td>
 <td style="text-align:right;">
-1355.1941
+1313.3487
 </td>
 </tr>
 <tr>
@@ -254,7 +346,7 @@ magnet_dumbbell_z
 magnet_dumbbell_y
 </td>
 <td style="text-align:right;">
-1132.4021
+1075.1768
 </td>
 </tr>
 <tr>
@@ -262,7 +354,7 @@ magnet_dumbbell_y
 pitch_belt
 </td>
 <td style="text-align:right;">
-988.0864
+973.0235
 </td>
 </tr>
 </tbody>
@@ -298,17 +390,109 @@ We’ll use 10 in our model. Fitting a model with `mtry=10` on the same
 training set we used with the boosting method, we get these results:
 
     ##  Accuracy     Kappa 
-    ## 0.9955850 0.9944149
+    ## 0.9930379 0.9911930
 
-The random forest obtains 99.6% accuracy on the validation set, compared
-to 99.5% for the boosted model. The models are nearly equivalent in
-their predictive ability, though the random forest was much faster to
-train.
+<table class="table" style="width: auto !important; ">
+<thead>
+<tr>
+<th style="text-align:left;">
+Prediction
+</th>
+<th style="text-align:right;">
+Sensitivity
+</th>
+<th style="text-align:right;">
+Specificity
+</th>
+<th style="text-align:right;">
+balanced.accuracy
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+Class: A
+</td>
+<td style="text-align:right;">
+0.9982079
+</td>
+<td style="text-align:right;">
+0.9976275
+</td>
+<td style="text-align:right;">
+0.9979177
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Class: B
+</td>
+<td style="text-align:right;">
+0.9877193
+</td>
+<td style="text-align:right;">
+0.9983154
+</td>
+<td style="text-align:right;">
+0.9930174
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Class: C
+</td>
+<td style="text-align:right;">
+0.9941577
+</td>
+<td style="text-align:right;">
+0.9965035
+</td>
+<td style="text-align:right;">
+0.9953306
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Class: D
+</td>
+<td style="text-align:right;">
+0.9875648
+</td>
+<td style="text-align:right;">
+0.9991877
+</td>
+<td style="text-align:right;">
+0.9933762
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Class: E
+</td>
+<td style="text-align:right;">
+0.9944598
+</td>
+<td style="text-align:right;">
+0.9995839
+</td>
+<td style="text-align:right;">
+0.9970218
+</td>
+</tr>
+</tbody>
+</table>
+
+The random forest obtains 99.3% accuracy on the validation set, compared
+to 99.26% for the boosted model. Their class-specific sensitivity,
+specificity, etc are also near-equal. The models are essentially
+equivalent in their predictive ability, though the random forest was
+much faster to train.
 
 Using the generic `importance` function to list variable importance, the
-top six variables for the random forest are identical to the boosted
-model, suggesting both models are finding similar structures in the
-data, which should increase our confidence in their correctness.
+top six variables for the random forest are the same the boosted model,
+suggesting both models are finding similar structures in the data, which
+increases our confidence in their correctness.
 
 <table class="table" style="width: auto !important; ">
 <thead>
@@ -327,7 +511,7 @@ MeanDecreaseGini
 roll_belt
 </td>
 <td style="text-align:right;">
-944.7879
+1008.7102
 </td>
 </tr>
 <tr>
@@ -335,7 +519,7 @@ roll_belt
 yaw_belt
 </td>
 <td style="text-align:right;">
-659.9613
+658.8992
 </td>
 </tr>
 <tr>
@@ -343,7 +527,7 @@ yaw_belt
 pitch_forearm
 </td>
 <td style="text-align:right;">
-593.0021
+629.6978
 </td>
 </tr>
 <tr>
@@ -351,7 +535,7 @@ pitch_forearm
 magnet_dumbbell_z
 </td>
 <td style="text-align:right;">
-542.0314
+573.8069
 </td>
 </tr>
 <tr>
@@ -359,7 +543,7 @@ magnet_dumbbell_z
 pitch_belt
 </td>
 <td style="text-align:right;">
-513.0512
+520.7653
 </td>
 </tr>
 <tr>
@@ -367,7 +551,7 @@ pitch_belt
 magnet_dumbbell_y
 </td>
 <td style="text-align:right;">
-489.4155
+508.8364
 </td>
 </tr>
 </tbody>
@@ -392,10 +576,19 @@ Both models predict the same values for the test set.
 
 # Conclusions
 
-After reducing the number of variables from 160 to 54, we were able to
-build a random forest model with predictive accuracy of 99.6%, and a
-boosted tree model with accuracy of 99.5%, both estimates coming from an
-independent test set.
+After reducing the number of variables from 160 to 52, we were able to
+build both random forest and boosted models with an accuracy of 99.3%,
+equivalent to be one false detection in 143 repetitions of a bicep curl.
+It seems likely that a combination of smart devices and machine learning
+are genuinely able to detect correct vs incorrect exercise form.
+
+To create a real-world product there would be much more work to do,
+starting with creating a much larger dataset including all the other
+types of exercise the smart device would support - this dataset only
+contains observations of one exercise. Other complications such as
+expert consultation with exercise physiologists and liability issues
+would have to be taken into account, so this is where I will end this
+project.
 
 # References
 
