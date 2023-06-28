@@ -32,11 +32,8 @@ e.g. throwing elbows to the front or thrusting their hips forward.
 
 # Summary of Results
 
-Using linear discriminant analysis (LDA) we created a baseline model
-with predictive accuracy of 70%. This did not match the original
-researchers’ benchmark of 78.5%.
-
-Finding that the data were not well-suited to the assumptions of LDA
+Finding that the data were not well-suited to the assumptions of Linear
+Discriminant Analysis,
 **we were able to build random forest and boosted models with predictive
 accuracy of 99.3%.**
 
